@@ -27,7 +27,7 @@ export const LANGUAGES = [
 ] as const;
 
 export const DEFAULT_SETTINGS = {
-  default_multiplier: "57",
+  default_multiplier: "50",
   price_refresh_hours: "24",
   default_language: "en",
   default_condition: "NM",

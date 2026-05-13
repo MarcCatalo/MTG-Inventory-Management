@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AddCardPanel } from "../features/inventory/AddCardPanel";
 import { InventoryPage } from "../features/inventory/InventoryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { fetchSettings, updateSettings } from "./apiClient";
 
 type Page = "Inventory" | "Sales Log" | "Import Review" | "Settings";
 
@@ -13,10 +14,29 @@ export function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isAddCardOpen, setIsAddCardOpen] = useState(false);
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
+  const [defaultMultiplier, setDefaultMultiplier] = useState("50");
 
   useEffect(() => {
     document.documentElement.dataset.theme = isDarkMode ? "dark" : "light";
   }, [isDarkMode]);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((settings) => {
+        setDefaultMultiplier(settings.default_multiplier);
+        setIsDarkMode(settings.theme === "dark");
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function handleThemeChange(nextDarkMode: boolean) {
+    setIsDarkMode(nextDarkMode);
+    try {
+      await updateSettings({ theme: nextDarkMode ? "dark" : "light" });
+    } catch {
+      // The Settings page save button remains the source of truth if the local API is unavailable.
+    }
+  }
 
   const actions = useMemo(() => {
     if (page !== "Inventory") {
@@ -33,11 +53,19 @@ export function App() {
           <Plus size={16} />
           Add Card
         </button>
-        <button className="button" type="button">
+        <button
+          className="button"
+          onClick={() => window.dispatchEvent(new Event("inventory:import"))}
+          type="button"
+        >
           <Upload size={16} />
           Import CSV
         </button>
-        <button className="button" type="button">
+        <button
+          className="button"
+          onClick={() => window.dispatchEvent(new Event("inventory:refresh"))}
+          type="button"
+        >
           <RefreshCw size={16} />
           Refresh Prices
         </button>
@@ -96,7 +124,14 @@ export function App() {
           <InventoryPage refreshKey={inventoryRefreshKey} />
         ) : null}
         {page === "Settings" ? (
-          <SettingsPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <SettingsPage
+            isDarkMode={isDarkMode}
+            setIsDarkMode={handleThemeChange}
+            onSettingsSaved={(settings) => {
+              setDefaultMultiplier(settings.default_multiplier);
+              setIsDarkMode(settings.theme === "dark");
+            }}
+          />
         ) : null}
         {page === "Sales Log" ? (
           <PlaceholderPage
@@ -113,6 +148,7 @@ export function App() {
       </main>
       {isAddCardOpen ? (
         <AddCardPanel
+          defaultMultiplier={defaultMultiplier}
           onClose={() => setIsAddCardOpen(false)}
           onSaved={() => {
             setIsAddCardOpen(false);

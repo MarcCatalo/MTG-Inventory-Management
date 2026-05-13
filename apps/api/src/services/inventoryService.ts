@@ -26,6 +26,14 @@ export class InventoryService {
     return this.inventoryRepository.getById(id);
   }
 
+  updateLot(id: number, input: Parameters<InventoryRepository["update"]>[1]): InventoryLot {
+    return this.inventoryRepository.update(id, input);
+  }
+
+  deleteLot(id: number): void {
+    this.inventoryRepository.delete(id);
+  }
+
   async refreshLotPrice(id: number): Promise<InventoryLot> {
     return this.pricingService.refreshLotPrice(this.getLot(id));
   }

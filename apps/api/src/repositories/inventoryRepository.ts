@@ -120,6 +120,63 @@ export class InventoryRepository {
     return mapInventoryLotRow(row);
   }
 
+  update(
+    id: number,
+    input: Partial<
+      Pick<
+        InventoryLot,
+        | "condition"
+        | "foilType"
+        | "language"
+        | "qty"
+        | "buyPricePhpPerCopy"
+        | "purchaseDate"
+        | "multiplier"
+        | "notes"
+      >
+    >,
+  ): InventoryLot {
+    const current = this.getById(id);
+    const next = { ...current, ...input };
+
+    this.db
+      .prepare(
+        `
+          UPDATE inventory_lots
+          SET
+            condition = @condition,
+            foil_type = @foilType,
+            language = @language,
+            qty = @qty,
+            buy_price_php_per_copy = @buyPricePhpPerCopy,
+            purchase_date = @purchaseDate,
+            multiplier = @multiplier,
+            notes = @notes,
+            is_sold_out = @isSoldOut,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = @id
+        `,
+      )
+      .run({
+        id,
+        condition: next.condition,
+        foilType: next.foilType,
+        language: next.language,
+        qty: next.qty,
+        buyPricePhpPerCopy: next.buyPricePhpPerCopy,
+        purchaseDate: next.purchaseDate,
+        multiplier: next.multiplier,
+        notes: next.notes,
+        isSoldOut: next.qty <= 0 ? 1 : 0,
+      });
+
+    return this.getById(id);
+  }
+
+  delete(id: number): void {
+    this.db.prepare("DELETE FROM inventory_lots WHERE id = ?").run(id);
+  }
+
   updatePricing(input: {
     id: number;
     marketPriceUsd: number | null;

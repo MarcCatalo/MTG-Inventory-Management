@@ -9,11 +9,12 @@ import {
 } from "../../app/apiClient";
 
 interface AddCardPanelProps {
+  defaultMultiplier: string;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function AddCardPanel({ onClose, onSaved }: AddCardPanelProps) {
+export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPanelProps) {
   const [query, setQuery] = useState("");
   const [names, setNames] = useState<string[]>([]);
   const [prints, setPrints] = useState<CardPrint[]>([]);
@@ -26,7 +27,7 @@ export function AddCardPanel({ onClose, onSaved }: AddCardPanelProps) {
   const [purchaseDate, setPurchaseDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
-  const [multiplier, setMultiplier] = useState("57");
+  const [multiplier, setMultiplier] = useState(defaultMultiplier);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string | null>(null);
 
@@ -43,7 +44,7 @@ export function AddCardPanel({ onClose, onSaved }: AddCardPanelProps) {
 
   async function handleSearch() {
     setStatus("Searching Scryfall...");
-    setNames(await searchCardNames(query));
+    setNames(await searchCardNames(sanitizeCardSearch(query)));
     setPrints([]);
     setSelectedPrint(null);
     setStatus(null);
@@ -258,4 +259,8 @@ export function AddCardPanel({ onClose, onSaved }: AddCardPanelProps) {
       </aside>
     </div>
   );
+}
+
+function sanitizeCardSearch(value: string): string {
+  return value.replace(/[^\p{L}\p{N}\s,'/-]/gu, " ").replace(/\s+/g, " ").trim();
 }

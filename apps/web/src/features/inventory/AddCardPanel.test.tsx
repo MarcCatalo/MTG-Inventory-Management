@@ -57,7 +57,7 @@ describe("AddCardPanel", () => {
           language: "en",
           qty: 2,
           buyPricePhpPerCopy: 120,
-          multiplier: 57,
+          multiplier: 50,
         });
         return jsonResponse({ lot: { id: 1, ...body } }, 201);
       }
@@ -65,7 +65,13 @@ describe("AddCardPanel", () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
 
-    render(<AddCardPanel onClose={() => undefined} onSaved={onSaved} />);
+    render(
+      <AddCardPanel
+        defaultMultiplier="50"
+        onClose={() => undefined}
+        onSaved={onSaved}
+      />,
+    );
 
     await user.type(screen.getByLabelText("Card name"), "Lightning Bolt");
     await user.click(screen.getByRole("button", { name: "Search" }));

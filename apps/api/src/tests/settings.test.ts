@@ -11,7 +11,7 @@ describe("settings service", () => {
     const service = new SettingsService(new SettingsRepository(db));
 
     expect(service.getSettings()).toMatchObject({
-      default_multiplier: "57",
+      default_multiplier: "50",
       price_refresh_hours: "24",
       default_language: "en",
       default_condition: "NM",

@@ -29,6 +29,17 @@ export function inventoryRoutes(inventoryService: InventoryService): Router {
     response.json({ lot: inventoryService.getLot(Number(request.params.id)) });
   });
 
+  router.patch("/inventory/:id", (request, response) => {
+    response.json({
+      lot: inventoryService.updateLot(Number(request.params.id), request.body),
+    });
+  });
+
+  router.delete("/inventory/:id", (request, response) => {
+    inventoryService.deleteLot(Number(request.params.id));
+    response.status(204).send();
+  });
+
   router.post("/inventory/:id/refresh-price", async (request, response, next) => {
     try {
       response.json({

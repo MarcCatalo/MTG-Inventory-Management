@@ -113,4 +113,8 @@ export function runMigrations(db: SqliteDatabase): void {
   });
 
   insertMany();
+
+  db.prepare(
+    "UPDATE settings SET value = '50' WHERE key = 'default_multiplier' AND value = '57'",
+  ).run();
 }
