@@ -1,4 +1,7 @@
 import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { InventoryLot } from "@mtg-inventory/shared";
+import { fetchInventoryLots } from "../../app/apiClient";
 
 const columns = [
   "Card Name",
@@ -13,14 +16,14 @@ const columns = [
   "Actions",
 ];
 
-const sampleRows = [
+const sampleRows: InventoryRow[] = [
   {
     name: "Lightning Bolt",
     set: "M20 #154",
     condition: "NM",
     foil: "Non-foil",
     qty: 4,
-    buy: "PHP 120",
+    buy: "PHP 120.00",
     market: "$3.50",
     suggested: "PHP 200",
     pnl: "+PHP 320",
@@ -31,14 +34,60 @@ const sampleRows = [
     condition: "LP",
     foil: "Foil",
     qty: 1,
-    buy: "PHP 2,100",
+    buy: "PHP 2,100.00",
     market: "$45.00",
     suggested: "PHP 2,570",
     pnl: "+PHP 470",
   },
 ];
 
-export function InventoryPage() {
+interface InventoryPageProps {
+  refreshKey: number;
+}
+
+interface InventoryRow {
+  name: string;
+  set: string;
+  condition: string;
+  foil: string;
+  qty: number;
+  buy: string;
+  market: string;
+  suggested: string;
+  pnl: string;
+}
+
+export function InventoryPage({ refreshKey }: InventoryPageProps) {
+  const [lots, setLots] = useState<InventoryLot[]>([]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    fetchInventoryLots()
+      .then((nextLots) => {
+        if (isCurrent) {
+          setLots(nextLots);
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setLots([]);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [refreshKey]);
+
+  const rows = useMemo(() => {
+    if (lots.length === 0) {
+      return sampleRows;
+    }
+
+    return lots.map(mapLotToRow);
+  }, [lots]);
+
   return (
     <div className="content-stack">
       <section className="summary-grid" aria-label="Inventory summary">
@@ -84,7 +133,7 @@ export function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {sampleRows.map((row) => (
+              {rows.map((row) => (
                 <tr key={row.name}>
                   <td>
                     <input aria-label={`Select ${row.name}`} type="checkbox" />
@@ -115,6 +164,30 @@ export function InventoryPage() {
       </section>
     </div>
   );
+}
+
+function mapLotToRow(lot: InventoryLot): InventoryRow {
+  const suggested = lot.suggestedPricePhp ?? 0;
+  const pnl = (suggested - lot.buyPricePhpPerCopy) * lot.qty;
+
+  return {
+    name: lot.cardName,
+    set: `${lot.setCode.toUpperCase()} #${lot.collectorNumber}`,
+    condition: lot.condition,
+    foil: lot.foilType,
+    qty: lot.qty,
+    buy: formatPhp(lot.buyPricePhpPerCopy),
+    market: lot.marketPriceUsd === null ? "-" : `$${lot.marketPriceUsd.toFixed(2)}`,
+    suggested: lot.suggestedPricePhp === null ? "-" : formatPhp(lot.suggestedPricePhp),
+    pnl: lot.suggestedPricePhp === null ? "-" : `${pnl >= 0 ? "+" : ""}${formatPhp(pnl)}`,
+  };
+}
+
+function formatPhp(value: number): string {
+  return `PHP ${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function Metric({

@@ -1,5 +1,6 @@
 import { Moon, Plus, RefreshCw, Settings, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AddCardPanel } from "../features/inventory/AddCardPanel";
 import { InventoryPage } from "../features/inventory/InventoryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 
@@ -10,6 +11,8 @@ const pages: Page[] = ["Inventory", "Sales Log", "Import Review", "Settings"];
 export function App() {
   const [page, setPage] = useState<Page>("Inventory");
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isAddCardOpen, setIsAddCardOpen] = useState(false);
+  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = isDarkMode ? "dark" : "light";
@@ -22,7 +25,11 @@ export function App() {
 
     return (
       <div className="top-actions" aria-label="Inventory actions">
-        <button className="button button-primary" type="button">
+        <button
+          className="button button-primary"
+          onClick={() => setIsAddCardOpen(true)}
+          type="button"
+        >
           <Plus size={16} />
           Add Card
         </button>
@@ -85,7 +92,9 @@ export function App() {
           {actions}
         </header>
 
-        {page === "Inventory" ? <InventoryPage /> : null}
+        {page === "Inventory" ? (
+          <InventoryPage refreshKey={inventoryRefreshKey} />
+        ) : null}
         {page === "Settings" ? (
           <SettingsPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
         ) : null}
@@ -102,6 +111,15 @@ export function App() {
           />
         ) : null}
       </main>
+      {isAddCardOpen ? (
+        <AddCardPanel
+          onClose={() => setIsAddCardOpen(false)}
+          onSaved={() => {
+            setIsAddCardOpen(false);
+            setInventoryRefreshKey((value) => value + 1);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
