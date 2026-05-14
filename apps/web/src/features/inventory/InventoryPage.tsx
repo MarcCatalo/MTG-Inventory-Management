@@ -1,12 +1,14 @@
 import type { InventoryLot } from "@mtg-inventory/shared";
-import { Image, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createSale,
   deleteInventoryLot,
+  fetchSales,
   fetchInventoryLots,
   refreshInventoryPrices,
   updateInventoryLot,
+  type SaleRecord,
 } from "../../app/apiClient";
 
 const columns = [
@@ -15,12 +17,19 @@ const columns = [
   "Condition",
   "Foil",
   "Qty",
-  "Buy PHP",
-  "Market USD",
-  "Suggested PHP",
+  "Bought Price",
+  "Listed Median USD",
+  "Selling Price",
   "P&L",
   "Actions",
 ];
+
+const previewSize = {
+  width: 240,
+  height: 336,
+  gap: 4,
+  margin: 16,
+};
 
 interface InventoryPageProps {
   refreshKey: number;
@@ -28,26 +37,49 @@ interface InventoryPageProps {
 
 export function InventoryPage({ refreshKey }: InventoryPageProps) {
   const [lots, setLots] = useState<InventoryLot[]>([]);
+  const [salesRealizedPnl, setSalesRealizedPnl] = useState(0);
+  const [sales, setSales] = useState<SaleRecord[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [query, setQuery] = useState("");
   const [includeSoldOut, setIncludeSoldOut] = useState(false);
   const [activeLot, setActiveLot] = useState<InventoryLot | null>(null);
   const [editingLot, setEditingLot] = useState<InventoryLot | null>(null);
   const [saleLot, setSaleLot] = useState<InventoryLot | null>(null);
+  const [bulkSaleLots, setBulkSaleLots] = useState<InventoryLot[] | null>(null);
+  const [pendingDeleteLot, setPendingDeleteLot] = useState<InventoryLot | null>(null);
+  const [pendingBulkDeleteLots, setPendingBulkDeleteLots] = useState<InventoryLot[] | null>(null);
+  const [cardPreview, setCardPreview] = useState<{
+    alt: string;
+    left: number;
+    src: string;
+    top: number;
+  } | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   async function loadLots() {
     try {
-      setLots(await fetchInventoryLots());
+      setLots(await fetchInventoryLots({ includeSoldOut }));
     } catch {
       setLots([]);
     }
   }
 
+  async function loadSalesMetrics() {
+    try {
+      const sales = await fetchSales();
+      setSales(sales);
+      setSalesRealizedPnl(sales.reduce((sum, sale) => sum + sale.realizedPnlPhp, 0));
+    } catch {
+      setSales([]);
+      setSalesRealizedPnl(0);
+    }
+  }
+
   useEffect(() => {
     void loadLots();
-  }, [refreshKey]);
+    void loadSalesMetrics();
+  }, [includeSoldOut, refreshKey]);
 
   const filteredLots = useMemo(() => {
     const sanitized = sanitizeSearch(query);
@@ -95,12 +127,28 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
       buyCost,
       portfolio,
       unrealized: portfolio - buyCost,
-      realized: 0,
+      realized: salesRealizedPnl,
     };
-  }, [lots]);
+  }, [lots, salesRealizedPnl]);
 
   const allVisibleSelected =
     filteredLots.length > 0 && filteredLots.every((lot) => selectedIds.includes(lot.id));
+  const selectedLots = useMemo(
+    () => lots.filter((lot) => selectedIds.includes(lot.id)),
+    [lots, selectedIds],
+  );
+  const realizedPnlByLot = useMemo(() => {
+    const totals = new Map<number, number>();
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        totals.set(
+          item.inventoryLotId,
+          (totals.get(item.inventoryLotId) ?? 0) + item.realizedPnlPhp,
+        );
+      }
+    }
+    return totals;
+  }, [sales]);
 
   useEffect(() => {
     const refresh = () => {
@@ -135,11 +183,47 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
   }
 
   async function handleDelete(lot: InventoryLot) {
-    if (!confirm(`Delete ${lot.cardName} (${lot.setCode.toUpperCase()} #${lot.collectorNumber})?`)) {
+    await deleteInventoryLot(lot.id);
+    setPendingDeleteLot(null);
+    setSelectedIds((current) => current.filter((selectedId) => selectedId !== lot.id));
+    await loadLots();
+  }
+
+  async function handleBulkDelete(lotsToDelete: InventoryLot[]) {
+    await Promise.all(lotsToDelete.map((lot) => deleteInventoryLot(lot.id)));
+    setPendingBulkDeleteLots(null);
+    setSelectedIds([]);
+    await loadLots();
+  }
+
+  function showCardPreview(anchor: HTMLElement, lot: InventoryLot) {
+    if (!lot.imageUris?.normal) {
       return;
     }
-    await deleteInventoryLot(lot.id);
-    await loadLots();
+
+    const rect = anchor.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const rightSide = rect.right + previewSize.gap;
+    const leftSide = rect.left - previewSize.width - previewSize.gap;
+    const fitsRight = rightSide + previewSize.width <= viewportWidth - previewSize.margin;
+    const preferredLeft = fitsRight ? rightSide : leftSide;
+    const left = Math.max(
+      previewSize.margin,
+      Math.min(preferredLeft, viewportWidth - previewSize.width - previewSize.margin),
+    );
+    const centeredTop = rect.top + rect.height / 2 - previewSize.height / 2;
+    const top = Math.max(
+      previewSize.margin,
+      Math.min(centeredTop, viewportHeight - previewSize.height - previewSize.margin),
+    );
+
+    setCardPreview({
+      alt: lot.cardName,
+      left,
+      src: lot.imageUris.normal,
+      top,
+    });
   }
 
   return (
@@ -147,10 +231,10 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
       <section className="summary-grid" aria-label="Inventory summary">
         <Metric label="Active Lots" value={String(metrics.activeLots)} />
         <Metric label="Total Copies" value={String(metrics.totalCopies)} />
-        <Metric label="Buy Cost" value={formatPhp(metrics.buyCost)} />
+        <Metric label="Bought Cost" value={formatPhp(metrics.buyCost)} />
         <Metric label="Portfolio Value" value={formatPhp(metrics.portfolio)} />
         <Metric label="Unrealized P&L" value={formatSignedPhp(metrics.unrealized)} />
-        <Metric label="Realized P&L" value={formatPhp(metrics.realized)} tone="neutral" />
+        <Metric label="Realized P&L" value={formatSignedPhp(metrics.realized)} tone="neutral" />
       </section>
 
       <section className="panel toolbar-panel" aria-label="Inventory filters">
@@ -201,6 +285,29 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
         </label>
       </section>
 
+      {selectedLots.length > 0 ? (
+        <section className="panel bulk-action-bar" aria-label="Selected inventory actions">
+          <strong>{selectedLots.length} selected</strong>
+          <div className="bulk-actions">
+            <button
+              className="button button-primary"
+              disabled={selectedLots.every((lot) => lot.qty <= 0)}
+              onClick={() => setBulkSaleLots(selectedLots.filter((lot) => lot.qty > 0))}
+              type="button"
+            >
+              Log Selected Sale
+            </button>
+            <button
+              className="button button-danger"
+              onClick={() => setPendingBulkDeleteLots(selectedLots)}
+              type="button"
+            >
+              Delete Selected
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {status ? <p className="muted">{status}</p> : null}
 
       <section className="panel table-panel" aria-label="Inventory table">
@@ -237,19 +344,19 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
                     />
                   </td>
                   <td className="name-cell">
-                    <button
-                      className="link-button"
-                      onClick={() => setActiveLot(lot)}
-                      type="button"
-                    >
-                      {lot.cardName}
-                    </button>
-                    {lot.imageUris?.normal ? (
-                      <span className="hover-preview">
-                        <Image size={14} />
-                        <img alt="" src={lot.imageUris.normal} />
-                      </span>
-                    ) : null}
+                    <span className="name-preview-wrap">
+                      <button
+                        className="link-button"
+                        onBlur={() => setCardPreview(null)}
+                        onFocus={(event) => showCardPreview(event.currentTarget, lot)}
+                        onMouseEnter={(event) => showCardPreview(event.currentTarget, lot)}
+                        onMouseLeave={() => setCardPreview(null)}
+                        onClick={() => setActiveLot(lot)}
+                        type="button"
+                      >
+                        {lot.cardName}
+                      </button>
+                    </span>
                   </td>
                   <td>{lot.setCode.toUpperCase()} #{lot.collectorNumber}</td>
                   <td>{lot.condition}</td>
@@ -258,8 +365,8 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
                   <td>{formatPhp(lot.buyPricePhpPerCopy)}</td>
                   <td>{lot.marketPriceUsd === null ? "-" : `$${lot.marketPriceUsd.toFixed(2)}`}</td>
                   <td>{lot.suggestedPricePhp === null ? "-" : formatPhp(lot.suggestedPricePhp)}</td>
-                  <td className={lotPnl(lot) >= 0 ? "positive" : "negative"}>
-                    {lot.suggestedPricePhp === null ? "-" : formatSignedPhp(lotPnl(lot))}
+                  <td className={displayLotPnl(lot, realizedPnlByLot) >= 0 ? "positive" : "negative"}>
+                    {formatLotPnl(lot, realizedPnlByLot)}
                   </td>
                   <td>
                     <div className="row-actions">
@@ -281,7 +388,7 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
                       <button
                         aria-label={`Delete ${lot.cardName}`}
                         className="icon-button compact"
-                        onClick={() => handleDelete(lot)}
+                        onClick={() => setPendingDeleteLot(lot)}
                         type="button"
                       >
                         <Trash2 size={14} />
@@ -315,11 +422,51 @@ export function InventoryPage({ refreshKey }: InventoryPageProps) {
           onClose={() => setSaleLot(null)}
           onSaved={async () => {
             setSaleLot(null);
+            setSelectedIds([]);
             await loadLots();
+            await loadSalesMetrics();
+          }}
+        />
+      ) : null}
+      {bulkSaleLots ? (
+        <BulkSaleModal
+          lots={bulkSaleLots}
+          onClose={() => setBulkSaleLots(null)}
+          onSaved={async () => {
+            setBulkSaleLots(null);
+            setSelectedIds([]);
+            await loadLots();
+            await loadSalesMetrics();
           }}
         />
       ) : null}
       {showImport ? <ImportNotice onClose={() => setShowImport(false)} /> : null}
+      {pendingDeleteLot ? (
+        <ConfirmDialog
+          body={`This removes ${pendingDeleteLot.cardName} (${pendingDeleteLot.setCode.toUpperCase()} #${pendingDeleteLot.collectorNumber}) from the local inventory database.`}
+          confirmLabel="Delete Lot"
+          onCancel={() => setPendingDeleteLot(null)}
+          onConfirm={() => handleDelete(pendingDeleteLot)}
+          title="Delete Inventory Lot?"
+        />
+      ) : null}
+      {pendingBulkDeleteLots ? (
+        <ConfirmDialog
+          body={`This removes ${pendingBulkDeleteLots.length} selected inventory lots from the local database.`}
+          confirmLabel="Delete Selected"
+          onCancel={() => setPendingBulkDeleteLots(null)}
+          onConfirm={() => handleBulkDelete(pendingBulkDeleteLots)}
+          title="Delete Selected Lots?"
+        />
+      ) : null}
+      {cardPreview ? (
+        <div
+          className="floating-card-preview"
+          style={{ left: cardPreview.left, top: cardPreview.top }}
+        >
+          <img alt={cardPreview.alt} src={cardPreview.src} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -341,10 +488,10 @@ function LotDetail({ lot, onClose }: { lot: InventoryLot; onClose: () => void })
             <dt>Printing</dt><dd>{lot.setCode.toUpperCase()} #{lot.collectorNumber}</dd>
             <dt>Condition / foil</dt><dd>{lot.condition} / {lot.foilType}</dd>
             <dt>Quantity</dt><dd>{lot.qty}</dd>
-            <dt>Buy price</dt><dd>{formatPhp(lot.buyPricePhpPerCopy)} per copy</dd>
-            <dt>Market price today</dt><dd>{lot.marketPriceUsd === null ? "-" : `$${lot.marketPriceUsd.toFixed(2)}`}</dd>
+            <dt>Bought price</dt><dd>{formatPhp(lot.buyPricePhpPerCopy)} per copy</dd>
+            <dt>Listed median today</dt><dd>{lot.marketPriceUsd === null ? "-" : `$${lot.marketPriceUsd.toFixed(2)}`}</dd>
             <dt>Multiplier</dt><dd>{lot.multiplier}</dd>
-            <dt>Suggested PHP</dt><dd>{lot.suggestedPricePhp === null ? "-" : formatPhp(lot.suggestedPricePhp)}</dd>
+            <dt>Selling price</dt><dd>{lot.suggestedPricePhp === null ? "-" : formatPhp(lot.suggestedPricePhp)}</dd>
             <dt>Notes</dt><dd>{lot.notes || "-"}</dd>
           </dl>
         </div>
@@ -385,7 +532,7 @@ function EditLotModal({
       <form className="modal lot-form page-motion" onSubmit={handleSubmit}>
         <h2>Edit {lot.cardName}</h2>
         <label>Qty<input value={qty} onChange={(event) => setQty(event.target.value)} type="number" /></label>
-        <label>Buy price PHP<input value={buy} onChange={(event) => setBuy(event.target.value)} type="number" /></label>
+        <label>Bought price PHP<input value={buy} onChange={(event) => setBuy(event.target.value)} type="number" /></label>
         <label>Multiplier<input value={multiplier} onChange={(event) => setMultiplier(event.target.value)} type="number" /></label>
         <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value as typeof condition)}><option>NM</option><option>LP</option><option>MP</option><option>HP</option><option>DMG</option></select></label>
         <label className="full-width">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
@@ -428,8 +575,96 @@ function SaleModal({
         <h2>Log Sale</h2>
         <p>{lot.cardName} - {lot.setCode.toUpperCase()} #{lot.collectorNumber}</p>
         <label>Qty sold<input max={lot.qty} min="1" value={qty} onChange={(event) => setQty(event.target.value)} type="number" /></label>
-        <label>Actual sell price PHP per copy<input value={price} onChange={(event) => setPrice(event.target.value)} type="number" /></label>
+        <label>Actual selling price PHP per copy<input required value={price} onChange={(event) => setPrice(event.target.value)} type="number" /></label>
         <div className="drawer-actions"><button className="button" onClick={onClose} type="button">Cancel</button><button className="button button-primary" type="submit">Save Sale</button></div>
+      </form>
+    </div>
+  );
+}
+
+function BulkSaleModal({
+  lots,
+  onClose,
+  onSaved,
+}: {
+  lots: InventoryLot[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [rows, setRows] = useState(() =>
+    lots.map((lot) => ({
+      id: lot.id,
+      qty: String(lot.qty),
+      price: String(lot.suggestedPricePhp ?? ""),
+    })),
+  );
+
+  function updateRow(id: number, field: "qty" | "price", value: string) {
+    setRows((current) =>
+      current.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+    );
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await createSale({
+      sellDate: new Date().toISOString().slice(0, 10),
+      items: rows
+        .map((row) => ({
+          inventoryLotId: row.id,
+          qtySold: Number(row.qty),
+          actualSellPricePhpPerCopy: Number(row.price),
+        }))
+        .filter((row) => row.qtySold > 0),
+    });
+    await onSaved();
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal bulk-sale-modal page-motion" onSubmit={handleSubmit}>
+        <h2>Log Selected Sale</h2>
+        <p className="muted">
+          Defaults mark every selected lot as sold using its current selling price.
+        </p>
+        <div className="bulk-sale-grid">
+          {lots.map((lot) => {
+            const row = rows.find((item) => item.id === lot.id);
+            return (
+              <div className="bulk-sale-row" key={lot.id}>
+                <div>
+                  <strong>{lot.cardName}</strong>
+                  <span>{lot.setCode.toUpperCase()} #{lot.collectorNumber}</span>
+                </div>
+                <label>
+                  Qty
+                  <input
+                    max={lot.qty}
+                    min="1"
+                    onChange={(event) => updateRow(lot.id, "qty", event.target.value)}
+                    required
+                    type="number"
+                    value={row?.qty ?? "1"}
+                  />
+                </label>
+                <label>
+                  Selling price per copy
+                  <input
+                    min="0"
+                    onChange={(event) => updateRow(lot.id, "price", event.target.value)}
+                    required
+                    type="number"
+                    value={row?.price ?? ""}
+                  />
+                </label>
+              </div>
+            );
+          })}
+        </div>
+        <div className="drawer-actions">
+          <button className="button" onClick={onClose} type="button">Cancel</button>
+          <button className="button button-primary" type="submit">Save Sale</button>
+        </div>
       </form>
     </div>
   );
@@ -447,12 +682,60 @@ function ImportNotice({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ConfirmDialog({
+  body,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+  title,
+}: {
+  body: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  title: string;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <section
+        aria-labelledby="confirm-title"
+        aria-modal="true"
+        className="modal confirm-dialog page-motion"
+        role="dialog"
+      >
+        <h2 id="confirm-title">{title}</h2>
+        <p className="muted">{body}</p>
+        <div className="drawer-actions">
+          <button className="button" onClick={onCancel} type="button">
+            Cancel
+          </button>
+          <button className="button button-danger" onClick={onConfirm} type="button">
+            {confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function sanitizeSearch(value: string): string {
   return value.replace(/[^\p{L}\p{N}\s,'#/-]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function lotPnl(lot: InventoryLot): number {
   return ((lot.suggestedPricePhp ?? 0) - lot.buyPricePhpPerCopy) * lot.qty;
+}
+
+function displayLotPnl(lot: InventoryLot, realizedPnlByLot: Map<number, number>): number {
+  return realizedPnlByLot.get(lot.id) ?? lotPnl(lot);
+}
+
+function formatLotPnl(lot: InventoryLot, realizedPnlByLot: Map<number, number>): string {
+  const realized = realizedPnlByLot.get(lot.id);
+  if (realized !== undefined) {
+    return formatSignedPhp(realized);
+  }
+  return lot.suggestedPricePhp === null ? "-" : formatSignedPhp(lotPnl(lot));
 }
 
 function formatSignedPhp(value: number): string {

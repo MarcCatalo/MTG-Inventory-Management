@@ -116,8 +116,8 @@ describe("inventory lots and price snapshots", () => {
 
 class FixedPriceProvider implements CardPriceProvider {
   readonly provider = "scryfall";
-  readonly providerLabel = "Scryfall / TCGPlayer USD reference";
-  readonly priceMetric = "usd_reference";
+  readonly providerLabel = "Scryfall / TCGPlayer listed median";
+  readonly priceMetric = "tcgplayer_listed_median";
 
   constructor(private readonly marketPriceUsd: number) {}
 
@@ -128,8 +128,8 @@ class FixedPriceProvider implements CardPriceProvider {
 
 class MissingPriceProvider implements CardPriceProvider {
   readonly provider = "scryfall";
-  readonly providerLabel = "Scryfall / TCGPlayer USD reference";
-  readonly priceMetric = "usd_reference";
+  readonly providerLabel = "Scryfall / TCGPlayer listed median";
+  readonly priceMetric = "tcgplayer_listed_median";
 
   async getMarketPriceUsd() {
     return {

@@ -115,7 +115,7 @@ export function SettingsPage({
           />
         </label>
         <p className="muted">
-          Active price source: Scryfall / TCGPlayer USD reference. Direct
+          Active price source: Scryfall / TCGPlayer listed median. Direct
           TCGPlayer credentials can be added in a future update.
         </p>
         {status ? <p className="muted">{status}</p> : null}

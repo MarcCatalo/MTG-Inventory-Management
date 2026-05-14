@@ -52,8 +52,8 @@ interface ScryfallListApiResponse<T> {
 
 export class ScryfallClient implements CardPriceProvider {
   readonly provider = "scryfall" as const;
-  readonly providerLabel = "Scryfall / TCGPlayer USD reference";
-  readonly priceMetric = "usd_reference";
+  readonly providerLabel = "Scryfall / TCGPlayer listed median";
+  readonly priceMetric = "tcgplayer_listed_median";
 
   async searchNames(query: string): Promise<string[]> {
     if (query.trim().length < 2) {
@@ -95,7 +95,7 @@ export class ScryfallClient implements CardPriceProvider {
     if (value === null) {
       return {
         marketPriceUsd: null,
-        errorMessage: `No ${input.foilType} USD reference price available`,
+        errorMessage: `No ${input.foilType} listed median USD price available`,
       };
     }
 

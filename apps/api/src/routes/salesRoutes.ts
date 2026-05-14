@@ -5,6 +5,10 @@ import type { SalesService } from "../services/salesService";
 export function salesRoutes(salesService: SalesService): Router {
   const router = Router();
 
+  router.get("/sales", (_request, response) => {
+    response.json({ sales: salesService.listSales() });
+  });
+
   router.post("/sales", (request, response) => {
     response.status(201).json({
       sale: salesService.createSale(createSaleSchema.parse(request.body)),

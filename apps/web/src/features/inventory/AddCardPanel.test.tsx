@@ -74,12 +74,14 @@ describe("AddCardPanel", () => {
     );
 
     await user.type(screen.getByLabelText("Card name"), "Lightning Bolt");
-    await user.click(screen.getByRole("button", { name: "Search" }));
     await user.click(await screen.findByRole("button", { name: "Lightning Bolt" }));
     await user.click(await screen.findByRole("button", { name: /Core Set 2020/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Core Set 2020/ })).not.toBeInTheDocument(),
+    );
     await user.clear(screen.getByLabelText("Qty"));
     await user.type(screen.getByLabelText("Qty"), "2");
-    await user.type(screen.getByLabelText("Buy price PHP per copy"), "120");
+    await user.type(screen.getByLabelText("Bought price PHP per copy"), "120");
     await user.click(screen.getByRole("button", { name: "Save Lot" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());

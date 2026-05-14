@@ -28,7 +28,7 @@ describe("App shell", () => {
 
     expect(screen.getByText("Active Lots")).toBeInTheDocument();
     expect(screen.getByText("Total Copies")).toBeInTheDocument();
-    expect(screen.getByText("Buy Cost")).toBeInTheDocument();
+    expect(screen.getByText("Bought Cost")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Card" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh Prices" })).toBeInTheDocument();
   });

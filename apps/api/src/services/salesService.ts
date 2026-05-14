@@ -8,6 +8,10 @@ export class SalesService {
     private readonly salesRepository: SalesRepository,
   ) {}
 
+  listSales() {
+    return this.salesRepository.list();
+  }
+
   createSale(input: CreateSaleInput) {
     const items = input.items.map((item) => {
       const lot = this.inventoryRepository.getById(item.inventoryLotId);

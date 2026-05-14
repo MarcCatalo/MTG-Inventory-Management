@@ -1,6 +1,6 @@
 import type { CreateInventoryLotInput } from "@mtg-inventory/shared";
-import { X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createInventoryLot,
   fetchCardPrints,
@@ -19,6 +19,7 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
   const [names, setNames] = useState<string[]>([]);
   const [prints, setPrints] = useState<CardPrint[]>([]);
   const [selectedPrint, setSelectedPrint] = useState<CardPrint | null>(null);
+  const [isNameLocked, setIsNameLocked] = useState(false);
   const [condition, setCondition] = useState<CreateInventoryLotInput["condition"]>("NM");
   const [foilType, setFoilType] = useState<CreateInventoryLotInput["foilType"]>("nonfoil");
   const [language, setLanguage] = useState<CreateInventoryLotInput["language"]>("en");
@@ -42,19 +43,55 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
       : ["nonfoil"];
   }, [selectedPrint]);
 
-  async function handleSearch() {
-    setStatus("Searching Scryfall...");
-    setNames(await searchCardNames(sanitizeCardSearch(query)));
-    setPrints([]);
+  useEffect(() => {
+    if (isNameLocked) {
+      return;
+    }
+
+    const sanitized = sanitizeCardSearch(query);
     setSelectedPrint(null);
-    setStatus(null);
-  }
+    setPrints([]);
+
+    if (sanitized.length < 2) {
+      setNames([]);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setStatus("Searching Scryfall...");
+      searchCardNames(sanitized)
+        .then(setNames)
+        .catch(() => setNames([]))
+        .finally(() => setStatus(null));
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [isNameLocked, query]);
 
   async function handleNameSelect(name: string) {
     setQuery(name);
+    setNames([]);
+    setPrints([]);
+    setSelectedPrint(null);
+    setIsNameLocked(true);
     setStatus("Loading printings...");
     setPrints(await fetchCardPrints(name));
     setStatus(null);
+  }
+
+  function handlePrintSelect(card: CardPrint) {
+    setSelectedPrint(card);
+    setPrints([]);
+    setFoilType(
+      (card.finishes.find((finish) =>
+        ["nonfoil", "foil", "etched"].includes(finish),
+      ) as CreateInventoryLotInput["foilType"] | undefined) ?? "nonfoil",
+    );
+  }
+
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    setIsNameLocked(false);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -105,30 +142,30 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
           </button>
         </header>
 
-        <div className="lookup-grid">
-          <label>
-            Card name
+        <div className="live-lookup">
+          <label className="search-box search-with-suggestions">
+            <Search size={16} />
             <input
               aria-label="Card name"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => handleQueryChange(event.target.value)}
               placeholder="Lightning Bolt"
               value={query}
             />
+            {names.length > 0 ? (
+              <div className="suggestion-menu">
+                {names.map((name, index) => (
+                  <button
+                    key={`${name}-${index}`}
+                    onClick={() => handleNameSelect(name)}
+                    type="button"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </label>
-          <button className="button button-primary" onClick={handleSearch} type="button">
-            Search
-          </button>
         </div>
-
-        {names.length > 0 ? (
-          <div className="choice-list" aria-label="Name suggestions">
-            {names.map((name) => (
-              <button key={name} onClick={() => handleNameSelect(name)} type="button">
-                {name}
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         {prints.length > 0 ? (
           <div className="print-grid" aria-label="Exact printings">
@@ -138,7 +175,7 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
                   selectedPrint?.id === card.id ? "print-card selected" : "print-card"
                 }
                 key={card.id}
-                onClick={() => setSelectedPrint(card)}
+                onClick={() => handlePrintSelect(card)}
                 type="button"
               >
                 {card.imageUris?.small ? (
@@ -154,6 +191,23 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
                 </span>
               </button>
             ))}
+          </div>
+        ) : null}
+
+        {selectedPrint ? (
+          <div className="selected-print-summary">
+            {selectedPrint.imageUris?.small ? (
+              <img alt="" src={selectedPrint.imageUris.small} />
+            ) : (
+              <span className="image-placeholder">No image</span>
+            )}
+            <div>
+              <strong>{selectedPrint.name}</strong>
+              <span>
+                {selectedPrint.setName} - {selectedPrint.setCode.toUpperCase()} #
+                {selectedPrint.collectorNumber}
+              </span>
+            </div>
           </div>
         ) : null}
 
@@ -209,9 +263,9 @@ export function AddCardPanel({ defaultMultiplier, onClose, onSaved }: AddCardPan
           </label>
 
           <label>
-            Buy price PHP per copy
+            Bought price PHP per copy
             <input
-              aria-label="Buy price PHP per copy"
+              aria-label="Bought price PHP per copy"
               min="0"
               onChange={(event) => setBuyPricePhpPerCopy(event.target.value)}
               step="0.01"

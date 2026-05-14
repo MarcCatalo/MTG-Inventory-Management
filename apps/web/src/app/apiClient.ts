@@ -25,6 +25,33 @@ export interface CardPrint {
   releasedAt: string | null;
 }
 
+export interface SaleRecord {
+  id: number;
+  sellDate: string;
+  buyerOrChannel: string | null;
+  notes: string | null;
+  actualTotalPhp: number;
+  suggestedTotalPhp: number;
+  realizedPnlPhp: number;
+  createdAt: string;
+  items: Array<{
+    id: number;
+    inventoryLotId: number;
+    cardName: string;
+    setCode: string;
+    condition: string;
+    foilType: string;
+    qtySold: number;
+    buyPricePhpPerCopy: number;
+    marketPriceUsdAtSale: number | null;
+    multiplierUsed: number;
+    suggestedPricePhpPerCopy: number | null;
+    actualSellPricePhpPerCopy: number;
+    realizedPnlPhp: number;
+    notes: string | null;
+  }>;
+}
+
 export async function searchCardNames(query: string): Promise<string[]> {
   const response = await fetch(`/api/cards/search?q=${encodeURIComponent(query)}`);
   assertOk(response);
@@ -39,8 +66,14 @@ export async function fetchCardPrints(name: string): Promise<CardPrint[]> {
   return body.cards;
 }
 
-export async function fetchInventoryLots(): Promise<InventoryLot[]> {
-  const response = await fetch("/api/inventory");
+export async function fetchInventoryLots(options?: {
+  includeSoldOut?: boolean;
+}): Promise<InventoryLot[]> {
+  const params = new URLSearchParams();
+  if (options?.includeSoldOut) {
+    params.set("includeSoldOut", "true");
+  }
+  const response = await fetch(`/api/inventory${params.size ? `?${params}` : ""}`);
   assertOk(response);
   const body = (await response.json()) as { lots: InventoryLot[] };
   return body.lots;
@@ -83,6 +116,13 @@ export async function createSale(input: CreateSaleInput): Promise<void> {
     body: JSON.stringify(input),
   });
   assertOk(response);
+}
+
+export async function fetchSales(): Promise<SaleRecord[]> {
+  const response = await fetch("/api/sales");
+  assertOk(response);
+  const body = (await response.json()) as { sales: SaleRecord[] };
+  return body.sales;
 }
 
 export async function fetchSettings(): Promise<Settings> {
