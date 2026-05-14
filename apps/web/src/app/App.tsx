@@ -1,13 +1,20 @@
-import { Moon, Plus, RefreshCw, Settings, Upload } from "lucide-react";
+import { ArrowLeft, Moon, Plus, RefreshCw, Settings, ShoppingCart, Store, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { addCartItem, removeCartItem, updateCartQuantity, type CartItem } from "../features/customer/cart";
+import { CustomerCardDetailPage } from "../features/customer/CustomerCardDetailPage";
+import { CustomerCartPage } from "../features/customer/CustomerCartPage";
+import { CustomerCatalogPage } from "../features/customer/CustomerCatalogPage";
+import { type CustomerCatalogItem } from "../features/customer/catalog";
+import { sampleCatalog } from "../features/customer/sampleCatalog";
 import { AddCardPanel } from "../features/inventory/AddCardPanel";
 import { InventoryPage } from "../features/inventory/InventoryPage";
+import { SalesLogPage } from "../features/sales/SalesLogPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { fetchSettings, updateSettings } from "./apiClient";
 
-type Page = "Inventory" | "Sales Log" | "Import Review" | "Settings";
+type Page = "Inventory" | "Sales Log" | "Import Review" | "Customer Catalog" | "Customer Cart" | "Settings";
 
-const pages: Page[] = ["Inventory", "Sales Log", "Import Review", "Settings"];
+const pages: Page[] = ["Inventory", "Sales Log", "Import Review", "Customer Catalog", "Customer Cart", "Settings"];
 
 export function App() {
   const [page, setPage] = useState<Page>("Inventory");
@@ -15,6 +22,9 @@ export function App() {
   const [isAddCardOpen, setIsAddCardOpen] = useState(false);
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
   const [defaultMultiplier, setDefaultMultiplier] = useState("50");
+  const [customerCards, setCustomerCards] = useState<CustomerCatalogItem[]>(sampleCatalog);
+  const [selectedCustomerListingId, setSelectedCustomerListingId] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartItem[]>([]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = isDarkMode ? "dark" : "light";
@@ -39,39 +49,79 @@ export function App() {
   }
 
   const actions = useMemo(() => {
-    if (page !== "Inventory") {
-      return null;
+    if (page === "Inventory") {
+      return (
+        <div className="top-actions" aria-label="Inventory actions">
+          <button
+            className="button button-primary"
+            onClick={() => setIsAddCardOpen(true)}
+            type="button"
+          >
+            <Plus size={16} />
+            Add Card
+          </button>
+          <button
+            className="button"
+            onClick={() => window.dispatchEvent(new Event("inventory:import"))}
+            type="button"
+          >
+            <Upload size={16} />
+            Import CSV
+          </button>
+          <button
+            className="button"
+            onClick={() => window.dispatchEvent(new Event("inventory:refresh"))}
+            type="button"
+          >
+            <RefreshCw size={16} />
+            Refresh Prices
+          </button>
+        </div>
+      );
     }
 
-    return (
-      <div className="top-actions" aria-label="Inventory actions">
-        <button
-          className="button button-primary"
-          onClick={() => setIsAddCardOpen(true)}
-          type="button"
-        >
-          <Plus size={16} />
-          Add Card
-        </button>
-        <button
-          className="button"
-          onClick={() => window.dispatchEvent(new Event("inventory:import"))}
-          type="button"
-        >
-          <Upload size={16} />
-          Import CSV
-        </button>
-        <button
-          className="button"
-          onClick={() => window.dispatchEvent(new Event("inventory:refresh"))}
-          type="button"
-        >
-          <RefreshCw size={16} />
-          Refresh Prices
-        </button>
-      </div>
-    );
+    if (page === "Customer Catalog") {
+      return (
+        <div className="top-actions" aria-label="Customer catalog actions">
+          <button className="button" onClick={() => setPage("Customer Cart")} type="button">
+            <ShoppingCart size={16} />
+            View cart
+          </button>
+        </div>
+      );
+    }
+
+    if (page === "Customer Cart") {
+      return (
+        <div className="top-actions" aria-label="Customer cart actions">
+          <button
+            className="button"
+            onClick={() => {
+              setSelectedCustomerListingId(null);
+              setPage("Customer Catalog");
+            }}
+            type="button"
+          >
+            <ArrowLeft size={16} />
+            Continue browsing
+          </button>
+        </div>
+      );
+    }
+
+    return null;
   }, [page]);
+
+  function openCustomerDetails(listingId: string) {
+    setSelectedCustomerListingId(listingId);
+    setPage("Customer Catalog");
+  }
+
+  function addCustomerCartItem(item: Omit<CartItem, "quantity">) {
+    setCart((currentCart) => addCartItem(currentCart, item));
+  }
+
+  const pageTitle = selectedCustomerListingId && page === "Customer Catalog" ? "Card Details" : page;
 
   return (
     <div className="app-shell">
@@ -89,10 +139,15 @@ export function App() {
             <button
               className={item === page ? "nav-item active" : "nav-item"}
               key={item}
-              onClick={() => setPage(item)}
+              onClick={() => {
+                setSelectedCustomerListingId(null);
+                setPage(item);
+              }}
               type="button"
             >
               {item === "Settings" ? <Settings size={16} /> : null}
+              {item === "Customer Catalog" ? <Store size={16} /> : null}
+              {item === "Customer Cart" ? <ShoppingCart size={16} /> : null}
               {item}
             </button>
           ))}
@@ -104,7 +159,7 @@ export function App() {
           <input
             aria-label="Quick dark mode"
             checked={isDarkMode}
-            onChange={(event) => setIsDarkMode(event.target.checked)}
+            onChange={(event) => void handleThemeChange(event.target.checked)}
             role="switch"
             type="checkbox"
           />
@@ -115,7 +170,7 @@ export function App() {
         <header className="page-header">
           <div>
             <p className="eyebrow">Local browser app</p>
-            <h1>{page}</h1>
+            <h1>{pageTitle}</h1>
           </div>
           {actions}
         </header>
@@ -134,9 +189,32 @@ export function App() {
           />
         ) : null}
         {page === "Sales Log" ? (
-          <PlaceholderPage
-            title="Sales batches will appear here"
-            text="This view will audit single-lot and bulk sales with suggested totals, actual totals, and realized PHP P&L."
+          <SalesLogPage />
+        ) : null}
+        {page === "Customer Catalog" && !selectedCustomerListingId ? (
+          <CustomerCatalogPage
+            cards={customerCards}
+            onCatalogLoaded={setCustomerCards}
+            onAddToCart={addCustomerCartItem}
+            onViewDetails={openCustomerDetails}
+          />
+        ) : null}
+        {page === "Customer Catalog" && selectedCustomerListingId ? (
+          <CustomerCardDetailPage
+            cards={customerCards}
+            listingId={selectedCustomerListingId}
+            onAddToCart={addCustomerCartItem}
+            onBackToCatalog={() => setSelectedCustomerListingId(null)}
+            onViewDetails={openCustomerDetails}
+          />
+        ) : null}
+        {page === "Customer Cart" ? (
+          <CustomerCartPage
+            cart={cart}
+            onQuantityChange={(itemId, quantity) =>
+              setCart((currentCart) => updateCartQuantity(currentCart, itemId, quantity))
+            }
+            onRemove={(itemId) => setCart((currentCart) => removeCartItem(currentCart, itemId))}
           />
         ) : null}
         {page === "Import Review" ? (
